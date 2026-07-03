@@ -15,7 +15,7 @@ The server Pi:
 
 - Runs the MQTT broker
 - Runs a DNS server to map `dashboard.lightbrary` to its own IP address
-- Keeps a log of room status changes (no need to save to file or DB, in-memory only is enough)
+- Keeps a log of room status changes on a file
 - Serves a HTTP dashboard listing the status changes and current status of each room
 
 User devices:
