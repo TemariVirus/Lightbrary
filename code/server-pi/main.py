@@ -126,7 +126,7 @@ def changes_since(timestamp: int) -> list[dict[str, Any]]:
     return sorted(changes, key=lambda change: change["time"])
 
 
-@app.get("/dashboard")
+@app.get("/")
 def dashboard():
     return render_template("dashboard.html", rooms=room_snapshot(), changes=changes_since(0))
 

@@ -24,7 +24,7 @@ local test (macOS may use 5000 for AirPlay). Set `MQTT_HOST`, `MQTT_PORT`, or `L
 
 ## Routes
 
-- `http://dashboard.lightbrary/dashboard` shows the current state of every room.
+- `http://dashboard.lightbrary/` shows the current state of every room.
 - `/api/status?timestamp=1710000000` returns each CSV change after the supplied
   Unix timestamp and a current room snapshot. A client uses the returned
   `timestamp` for its next poll.
