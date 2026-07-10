@@ -218,5 +218,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     load_history()
     start_mqtt()
-    # app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "80")))
-    app.run(port=int(os.environ.get("PORT", "80")))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "80")))
