@@ -1,3 +1,5 @@
 colorzero==2.0
 gpiozero==2.0.1
-setuptools==82.0.1
+paho-mqtt==2.1.0
+RPi.GPIO==0.7.1
+setuptools==83.0.0
