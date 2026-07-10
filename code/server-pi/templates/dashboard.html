@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lightbrary dashboard</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: .65rem; text-align: left; border-bottom: 1px solid #ddd; }
+      .Available { color: #167a31; } .Occupied { color: #a54d00; } .Offline { color: #777; }
+    </style>
+  </head>
+  <body>
+    <h1>Lightbrary room status</h1>
+    <table>
+      <thead><tr><th>Room</th><th>Status</th><th>Changed</th></tr></thead>
+      <tbody id="rooms">
+        {% for room in rooms %}
+        <tr><td>{{ room.room }}</td><td class="{{ room.status }}">{{ room.status }}</td><td data-time="{{ room.time }}"></td></tr>
+        {% else %}
+        <tr><td colspan="3">No room updates received yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <h2>Status history</h2>
+    <table>
+      <thead><tr><th>Room</th><th>Status</th><th>Time</th></tr></thead>
+      <tbody>
+        {% for change in changes | reverse %}
+        <tr><td>{{ change.room }}</td><td class="{{ change.status }}">{{ change.status }}</td><td data-time="{{ change.time }}"></td></tr>
+        {% else %}
+        <tr><td colspan="3">No status changes recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <script>
+      function formatTimes() {
+        document.querySelectorAll('[data-time]').forEach((cell) => {
+          cell.textContent = new Date(Number(cell.dataset.time) * 1000).toLocaleString();
+        });
+      }
+      formatTimes();
+      setInterval(() => location.reload(), 30000);
+    </script>
+  </body>
+</html>
