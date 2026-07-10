@@ -25,6 +25,8 @@ TOPIC_PATTERN = re.compile(r"^rooms/([^/]+)/status$")
 VALID_STATUSES = {"Available", "Occupied"}
 
 app = Flask(__name__)
+# TODO: open the file with an exclusive lock and keep it open for the processes lifetime.
+# Only use this lock for coordinating within this process
 lock = threading.RLock()
 # room -> {status, last_seen, changed_at}
 rooms: dict[str, dict[str, Any]] = {}
@@ -152,6 +154,7 @@ def on_connect(client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any,
 def on_message(client: mqtt.Client, userdata: Any, message: mqtt.MQTTMessage) -> None:
     match = TOPIC_PATTERN.fullmatch(message.topic)
     if not match:
+        logging.fatal("Invalid topic: %s", message.topic)
         return
     try:
         payload = json.loads(message.payload.decode("utf-8"))
