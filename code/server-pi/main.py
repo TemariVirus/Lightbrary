@@ -15,7 +15,6 @@ from typing import Any
 import paho.mqtt.client as mqtt
 from flask import Flask, jsonify, render_template, request
 
-
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("LIGHTBRARY_DATA_DIR", BASE_DIR / "data"))
 MQTT_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
@@ -34,7 +33,9 @@ rooms: dict[str, dict[str, Any]] = {}
 
 def log_path(timestamp: int) -> Path:
     """Return the daily, append-only log path for a Unix timestamp."""
-    return DATA_DIR / f"status-{datetime.fromtimestamp(timestamp).date().isoformat()}.csv"
+    return (
+        DATA_DIR / f"status-{datetime.fromtimestamp(timestamp).date().isoformat()}.csv"
+    )
 
 
 def ensure_log_file(path: Path) -> None:
@@ -89,7 +90,11 @@ def record_status(room: str, status: str, timestamp: int | None = None) -> None:
             changed_at = timestamp
         else:
             changed_at = previous["changed_at"]
-        rooms[room] = {"status": status, "last_seen": timestamp, "changed_at": changed_at}
+        rooms[room] = {
+            "status": status,
+            "last_seen": timestamp,
+            "changed_at": changed_at,
+        }
 
 
 def refresh_offline_rooms(now: int | None = None) -> None:
@@ -97,9 +102,16 @@ def refresh_offline_rooms(now: int | None = None) -> None:
     now = now or int(time.time())
     with lock:
         for room, state in list(rooms.items()):
-            if state["status"] != "Offline" and now - state["last_seen"] > OFFLINE_AFTER_SECONDS:
+            if (
+                state["status"] != "Offline"
+                and now - state["last_seen"] > OFFLINE_AFTER_SECONDS
+            ):
                 append_change(room, now, "Offline")
-                rooms[room] = {"status": "Offline", "last_seen": state["last_seen"], "changed_at": now}
+                rooms[room] = {
+                    "status": "Offline",
+                    "last_seen": state["last_seen"],
+                    "changed_at": now,
+                }
 
 
 def room_snapshot() -> list[dict[str, Any]]:
@@ -120,7 +132,13 @@ def changes_since(timestamp: int) -> list[dict[str, Any]]:
             for row in csv.DictReader(file):
                 try:
                     if int(row["time"]) > timestamp:
-                        changes.append({"room": row["room"], "time": int(row["time"]), "status": row["status"]})
+                        changes.append(
+                            {
+                                "room": row["room"],
+                                "time": int(row["time"]),
+                                "status": row["status"],
+                            }
+                        )
                 except (KeyError, TypeError, ValueError):
                     continue
     return sorted(changes, key=lambda change: change["time"])
@@ -128,7 +146,9 @@ def changes_since(timestamp: int) -> list[dict[str, Any]]:
 
 @app.get("/")
 def dashboard():
-    return render_template("dashboard.html", rooms=room_snapshot(), changes=changes_since(0))
+    return render_template(
+        "dashboard.html", rooms=room_snapshot(), changes=changes_since(0)
+    )
 
 
 @app.get("/api/status")
@@ -140,10 +160,22 @@ def api_status():
     except ValueError:
         return jsonify({"error": "timestamp must be a Unix timestamp in seconds"}), 400
     refresh_offline_rooms()
-    return jsonify({"timestamp": int(time.time()), "changes": changes_since(timestamp), "rooms": room_snapshot()})
+    return jsonify(
+        {
+            "timestamp": int(time.time()),
+            "changes": changes_since(timestamp),
+            "rooms": room_snapshot(),
+        }
+    )
 
 
-def on_connect(client: mqtt.Client, userdata: Any, flags: Any, reason_code: Any, properties: Any = None) -> None:
+def on_connect(
+    client: mqtt.Client,
+    userdata: Any,
+    flags: Any,
+    reason_code: Any,
+    properties: Any = None,
+) -> None:
     if reason_code == 0:
         client.subscribe("rooms/+/status")
         logging.info("Subscribed to room status updates")
@@ -160,7 +192,11 @@ def on_message(client: mqtt.Client, userdata: Any, message: mqtt.MQTTMessage) ->
         payload = json.loads(message.payload.decode("utf-8"))
         status = payload["status"]
         timestamp = payload["timestamp"]
-        if status not in VALID_STATUSES or isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
+        if (
+            status not in VALID_STATUSES
+            or isinstance(timestamp, bool)
+            or not isinstance(timestamp, (int, float))
+        ):
             raise ValueError("invalid status")
         record_status(match.group(1), status, int(timestamp))
     except (UnicodeDecodeError, json.JSONDecodeError, KeyError, ValueError) as error:
@@ -168,7 +204,9 @@ def on_message(client: mqtt.Client, userdata: Any, message: mqtt.MQTTMessage) ->
 
 
 def start_mqtt() -> mqtt.Client:
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="lightbrary-dashboard")
+    client = mqtt.Client(
+        mqtt.CallbackAPIVersion.VERSION2, client_id="lightbrary-dashboard"
+    )
     client.on_connect = on_connect
     client.on_message = on_message
     client.connect_async(MQTT_HOST, MQTT_PORT, keepalive=60)
@@ -180,4 +218,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     load_history()
     start_mqtt()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "80")))
+    # app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "80")))
+    app.run(port=int(os.environ.get("PORT", "80")))
