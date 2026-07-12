@@ -79,9 +79,8 @@ def load_history() -> None:
                         }
 
 
-def record_status(room: str, status: str, timestamp: int | None = None) -> None:
+def record_status(room: str, status: str, timestamp: int) -> None:
     """Accept a device update and persist it only when the visible status changed."""
-    timestamp = timestamp or int(time.time())
     with lock:
         previous = rooms.get(room)
         if previous is None or previous["status"] != status:
