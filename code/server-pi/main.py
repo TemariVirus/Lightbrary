@@ -21,10 +21,9 @@ MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 OFFLINE_AFTER_SECONDS = 60
 TOPIC_PATTERN = re.compile(r"^rooms/([^/]+)/status$")
 VALID_STATUSES = {"Available", "Occupied"}
+HTTP_PORT = int(os.environ.get("PORT", "80"))
 
 app = Flask(__name__)
-# TODO: open the file with an exclusive lock and keep it open for the processes lifetime.
-# Only use this lock for coordinating within this process
 lock = threading.RLock()
 # room -> {status, last_seen, changed_at}
 rooms: dict[str, dict[str, Any]] = {}
@@ -41,9 +40,10 @@ def ensure_log_file(path: Path) -> None:
     """Create a new log with its header exactly once (exclusive creation)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        # x is Python's exclusive-create flag: existing logs are never replaced.
-        with path.open("x", newline="", encoding="utf-8") as file:
-            csv.writer(file).writerow(["room", "time", "status"])
+        with lock:
+            # x is Python's exclusive-create flag: existing logs are never replaced.
+            with path.open("x", newline="", encoding="utf-8") as file:
+                csv.writer(file).writerow(["room", "time", "status"])
     except FileExistsError:
         pass
 
@@ -52,8 +52,9 @@ def append_change(room: str, timestamp: int, status: str) -> None:
     """Append, never rewrite, one status change to that day's CSV file."""
     path = log_path(timestamp)
     ensure_log_file(path)
-    with path.open("a", newline="", encoding="utf-8") as file:
-        csv.writer(file).writerow([room, timestamp, status])
+    with lock:
+        with path.open("a", newline="", encoding="utf-8") as file:
+            csv.writer(file).writerow([room, timestamp, status])
 
 
 def load_history() -> None:
@@ -125,20 +126,21 @@ def changes_since(timestamp: int) -> list[dict[str, Any]]:
     changes: list[dict[str, Any]] = []
     if not DATA_DIR.exists():
         return changes
-    for path in sorted(DATA_DIR.glob("status-*.csv")):
-        with path.open(newline="", encoding="utf-8") as file:
-            for row in csv.DictReader(file):
-                try:
-                    if int(row["time"]) > timestamp:
-                        changes.append(
-                            {
-                                "room": row["room"],
-                                "time": int(row["time"]),
-                                "status": row["status"],
-                            }
-                        )
-                except (KeyError, TypeError, ValueError):
-                    continue
+    with lock:
+        for path in sorted(DATA_DIR.glob("status-*.csv")):
+            with path.open(newline="", encoding="utf-8") as file:
+                for row in csv.DictReader(file):
+                    try:
+                        if int(row["time"]) > timestamp:
+                            changes.append(
+                                {
+                                    "room": row["room"],
+                                    "time": int(row["time"]),
+                                    "status": row["status"],
+                                }
+                            )
+                    except (KeyError, TypeError, ValueError):
+                        continue
     return sorted(changes, key=lambda change: change["time"])
 
 
@@ -216,4 +218,4 @@ if __name__ == "__main__":
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     load_history()
     start_mqtt()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "80")))
+    app.run(host="0.0.0.0", port=HTTP_PORT)
