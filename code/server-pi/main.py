@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Lightbrary Server Pi: MQTT status collector and Flask dashboard."""
 
 import csv
