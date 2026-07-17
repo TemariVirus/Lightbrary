@@ -3,45 +3,561 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Lightbrary dashboard</title>
+    <meta name="description" content="Live room availability dashboard for Lightbrary.">
+    <title>Lightbrary — Room Status</title>
     <style>
-      body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { padding: .65rem; text-align: left; border-bottom: 1px solid #ddd; }
-      .Available { color: #167a31; } .Occupied { color: #a54d00; } .Offline { color: #777; }
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg:         #111;
+        --surface:    #1a1a1a;
+        --border:     #2e2e2e;
+        --text:       #ddd;
+        --muted:      #666;
+        --available:  #4caf50;
+        --occupied:   #e07b39;
+        --offline:    #555;
+      }
+
+      body {
+        font-family: system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .shell {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 2rem 1rem 4rem;
+      }
+
+      /* Header */
+      header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        padding-bottom: .75rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      h1 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      #last-updated {
+        font-size: .8rem;
+        color: var(--muted);
+      }
+
+      /* Section label */
+      .label {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--muted);
+        margin-bottom: .6rem;
+      }
+
+      section { margin-bottom: 2.5rem; }
+
+      /* Filter bar */
+      .filters {
+        display: flex;
+        gap: .5rem;
+        margin-bottom: .75rem;
+        flex-wrap: wrap;
+      }
+
+      .filters input,
+      .filters select {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: .8rem;
+        padding: .3rem .6rem;
+        border-radius: 3px;
+        outline: none;
+      }
+
+      .filters input::placeholder { color: var(--muted); }
+
+      .filters input:focus,
+      .filters select:focus {
+        border-color: #444;
+      }
+
+      .filters select option { background: #1a1a1a; }
+
+      /* Time preset buttons */
+      .time-presets {
+        display: flex;
+        gap: 2px;
+      }
+
+      .preset-btn {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: .75rem;
+        padding: .25rem .55rem;
+        cursor: pointer;
+        border-radius: 3px;
+        line-height: 1.4;
+      }
+
+      .preset-btn:hover { color: var(--text); border-color: #444; }
+
+      .preset-btn.active {
+        background: var(--surface);
+        color: var(--text);
+        border-color: #555;
+      }
+
+      /* Tables */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th {
+        padding: .45rem .75rem;
+        text-align: left;
+        font-size: .72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      th:hover { color: var(--text); }
+
+      th.sorted-asc::after  { content: ' ↑'; }
+      th.sorted-desc::after { content: ' ↓'; }
+
+      td {
+        padding: .55rem .75rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+
+      tbody tr:last-child td { border-bottom: none; }
+
+      tbody tr.hidden { display: none; }
+
+      .room-name {
+        font-weight: 500;
+        color: var(--text);
+      }
+
+      .status {
+        font-size: .82rem;
+        font-weight: 500;
+      }
+
+      .status.Available { color: var(--available); }
+      .status.Occupied  { color: var(--occupied); }
+      .status.Offline   { color: var(--offline); }
+
+      .since {
+        font-size: .78rem;
+        color: var(--muted);
+      }
+
+      .empty {
+        color: var(--muted);
+        padding: 1rem .75rem;
+        font-size: .85rem;
+      }
+
+      /* History */
+      .history-wrap {
+        border: 1px solid var(--border);
+        border-radius: 3px;
+      }
+
+      .history-header {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: .75rem;
+        padding: .45rem .75rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .history-header span {
+        font-size: .72rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--muted);
+      }
+
+      .history-entry {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: .75rem;
+        align-items: center;
+        padding: .5rem .75rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .history-entry:last-child { border-bottom: none; }
+      .history-entry.hidden { display: none; }
+
+      .entry-room {
+        font-size: .85rem;
+        color: var(--text);
+      }
+
+      .entry-status {
+        font-size: .78rem;
+        font-weight: 500;
+      }
+
+      .entry-status.Available { color: var(--available); }
+      .entry-status.Occupied  { color: var(--occupied); }
+      .entry-status.Offline   { color: var(--offline); }
+
+      .entry-time {
+        font-size: .75rem;
+        color: var(--muted);
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .history-empty {
+        padding: 1rem .75rem;
+        color: var(--muted);
+        font-size: .85rem;
+      }
     </style>
   </head>
   <body>
-    <h1>Lightbrary room status</h1>
-    <table>
-      <thead><tr><th>Room</th><th>Status</th><th>Changed</th></tr></thead>
-      <tbody id="rooms">
-        {% for room in rooms %}
-        <tr><td>{{ room.room }}</td><td class="{{ room.status }}">{{ room.status }}</td><td data-time="{{ room.time }}"></td></tr>
-        {% else %}
-        <tr><td colspan="3">No room updates received yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <h2>Status history</h2>
-    <table>
-      <thead><tr><th>Room</th><th>Status</th><th>Time</th></tr></thead>
-      <tbody>
-        {% for change in changes | reverse %}
-        <tr><td>{{ change.room }}</td><td class="{{ change.status }}">{{ change.status }}</td><td data-time="{{ change.time }}"></td></tr>
-        {% else %}
-        <tr><td colspan="3">No status changes recorded yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="shell">
+
+      <header>
+        <h1>Lightbrary / Room Status</h1>
+        <span id="last-updated">Live</span>
+      </header>
+
+      <!-- Current Status -->
+      <section id="rooms-section">
+        <p class="label">Current Status</p>
+
+        <div class="filters">
+          <input id="filter-room" type="text" placeholder="Filter by room…" autocomplete="off">
+          <select id="filter-status">
+            <option value="">All statuses</option>
+            <option value="Available">Available</option>
+            <option value="Occupied">Occupied</option>
+            <option value="Offline">Offline</option>
+          </select>
+          <div class="time-presets" id="room-time-presets">
+            <button class="preset-btn active" data-sec="0">All</button>
+            <button class="preset-btn" data-sec="900">15m</button>
+            <button class="preset-btn" data-sec="3600">1h</button>
+            <button class="preset-btn" data-sec="21600">6h</button>
+            <button class="preset-btn" data-sec="86400">Today</button>
+          </div>
+        </div>
+
+        <table id="rooms-table">
+          <thead>
+            <tr>
+              <th data-col="room">Room</th>
+              <th data-col="status">Status</th>
+              <th data-col="since">Since</th>
+            </tr>
+          </thead>
+          <tbody id="rooms-tbody">
+            {% for room in rooms %}
+            <tr id="row-{{ room.room }}" data-room="{{ room.room }}" data-status="{{ room.status }}" data-time="{{ room.time }}">
+              <td class="room-name">{{ room.room }}</td>
+              <td class="status {{ room.status }}">{{ room.status }}</td>
+              <td class="since" data-since="{{ room.time }}"></td>
+            </tr>
+            {% else %}
+            <tr><td class="empty" colspan="3">No room data received yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </section>
+
+      <!-- History -->
+      <section id="history-section">
+        <p class="label">Status History</p>
+
+        <div class="filters">
+          <input id="hist-filter-room" type="text" placeholder="Filter by room…" autocomplete="off">
+          <select id="hist-filter-status">
+            <option value="">All statuses</option>
+            <option value="Available">Available</option>
+            <option value="Occupied">Occupied</option>
+            <option value="Offline">Offline</option>
+          </select>
+          <div class="time-presets" id="hist-time-presets">
+            <button class="preset-btn active" data-sec="0">All</button>
+            <button class="preset-btn" data-sec="900">15m</button>
+            <button class="preset-btn" data-sec="3600">1h</button>
+            <button class="preset-btn" data-sec="21600">6h</button>
+            <button class="preset-btn" data-sec="86400">Today</button>
+          </div>
+        </div>
+
+        <div class="history-wrap">
+          <div class="history-header">
+            <span>Room</span>
+            <span>Status</span>
+            <span>Time</span>
+          </div>
+          <div id="history-feed">
+            {% for change in changes | reverse %}
+            <div class="history-entry" data-room="{{ change.room }}" data-status="{{ change.status }}" data-ts="{{ change.time }}">
+              <span class="entry-room">{{ change.room }}</span>
+              <span class="entry-status {{ change.status }}">{{ change.status }}</span>
+              <span class="entry-time" data-time="{{ change.time }}"></span>
+            </div>
+            {% else %}
+            <div class="history-empty">No status changes recorded yet.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+    </div>
+
     <script>
-      function formatTimes() {
-        document.querySelectorAll('[data-time]').forEach((cell) => {
-          cell.textContent = new Date(Number(cell.dataset.time) * 1000).toLocaleString();
+      function fmt(unixSec) {
+        return new Date(unixSec * 1000).toLocaleString(undefined, {
+          month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
         });
       }
-      formatTimes();
-      setInterval(() => location.reload(), 3000);
+
+      function relTime(unixSec) {
+        const diff = Math.floor(Date.now() / 1000) - unixSec;
+        if (diff < 5)     return 'just now';
+        if (diff < 60)    return `${diff}s ago`;
+        if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return `${Math.floor(diff / 86400)}d ago`;
+      }
+
+      function renderAllTimes() {
+        document.querySelectorAll('[data-time]').forEach(el => {
+          el.textContent = fmt(Number(el.dataset.time));
+        });
+        document.querySelectorAll('[data-since]').forEach(el => {
+          el.textContent = relTime(Number(el.dataset.since));
+        });
+      }
+      renderAllTimes();
+
+
+      const filterRoom   = document.getElementById('filter-room');
+      const filterStatus = document.getElementById('filter-status');
+      const tbody        = document.getElementById('rooms-tbody');
+      let roomWindowSec  = 0; // 0 = no time filter
+
+      function applyRoomFilter() {
+        const roomQ   = filterRoom.value.trim().toLowerCase();
+        const statusQ = filterStatus.value;
+        const cutoff  = roomWindowSec ? Math.floor(Date.now() / 1000) - roomWindowSec : 0;
+        tbody.querySelectorAll('tr[data-room]').forEach(row => {
+          const t = Number(row.dataset.time);
+          const matchRoom   = !roomQ   || row.dataset.room.toLowerCase().includes(roomQ);
+          const matchStatus = !statusQ || row.dataset.status === statusQ;
+          const matchTime   = !cutoff  || t >= cutoff;
+          row.classList.toggle('hidden', !(matchRoom && matchStatus && matchTime));
+        });
+      }
+
+      filterRoom.addEventListener('input', applyRoomFilter);
+      filterStatus.addEventListener('change', applyRoomFilter);
+
+      document.querySelectorAll('#room-time-presets .preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#room-time-presets .preset-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          roomWindowSec = Number(btn.dataset.sec);
+          applyRoomFilter();
+        });
+      });
+
+      // ── Filters: history feed ────────────────────────────────────────────────
+
+      const histFilterRoom   = document.getElementById('hist-filter-room');
+      const histFilterStatus = document.getElementById('hist-filter-status');
+      const feed             = document.getElementById('history-feed');
+      let histWindowSec      = 0;
+
+      function applyHistFilter() {
+        const roomQ   = histFilterRoom.value.trim().toLowerCase();
+        const statusQ = histFilterStatus.value;
+        const cutoff  = histWindowSec ? Math.floor(Date.now() / 1000) - histWindowSec : 0;
+        feed.querySelectorAll('.history-entry[data-room]').forEach(el => {
+          const t = Number(el.dataset.ts);
+          const matchRoom   = !roomQ   || el.dataset.room.toLowerCase().includes(roomQ);
+          const matchStatus = !statusQ || el.dataset.status === statusQ;
+          const matchTime   = !cutoff  || t >= cutoff;
+          el.classList.toggle('hidden', !(matchRoom && matchStatus && matchTime));
+        });
+      }
+
+      histFilterRoom.addEventListener('input', applyHistFilter);
+      histFilterStatus.addEventListener('change', applyHistFilter);
+
+      document.querySelectorAll('#hist-time-presets .preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#hist-time-presets .preset-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          histWindowSec = Number(btn.dataset.sec);
+          applyHistFilter();
+        });
+      });
+
+      // ── Sort: rooms table ────────────────────────────────────────────────────
+
+      let sortCol = null, sortDir = 1;
+
+      document.querySelectorAll('#rooms-table th[data-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.col;
+          if (sortCol === col) {
+            sortDir *= -1;
+          } else {
+            sortCol = col;
+            sortDir = 1;
+          }
+          document.querySelectorAll('#rooms-table th').forEach(t => {
+            t.classList.remove('sorted-asc', 'sorted-desc');
+          });
+          th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+
+          const rows = [...tbody.querySelectorAll('tr[data-room]')];
+          rows.sort((a, b) => {
+            let av, bv;
+            if (col === 'room')   { av = a.dataset.room;   bv = b.dataset.room; }
+            if (col === 'status') { av = a.dataset.status; bv = b.dataset.status; }
+            if (col === 'since')  { av = Number(a.dataset.time); bv = Number(b.dataset.time); }
+            if (typeof av === 'number') return (av - bv) * sortDir;
+            return av.localeCompare(bv) * sortDir;
+          });
+          rows.forEach(r => tbody.appendChild(r));
+        });
+      });
+
+      // ── Row upsert ───────────────────────────────────────────────────────────
+
+      const table = document.getElementById('rooms-table');
+
+      function upsertRow(room, status, time) {
+        let row = document.getElementById('row-' + room);
+
+        if (!row) {
+          const emptyRow = tbody.querySelector('.empty');
+          if (emptyRow) emptyRow.closest('tr').remove();
+
+          row = document.createElement('tr');
+          row.id = 'row-' + room;
+          row.dataset.room = room;
+          row.innerHTML = `
+            <td class="room-name">${room}</td>
+            <td class="status"></td>
+            <td class="since"></td>`;
+          tbody.appendChild(row);
+        }
+
+        if (row.dataset.status === status) return;
+
+        row.dataset.status = status;
+        row.dataset.time   = time;
+
+        const statusEl = row.querySelector('.status');
+        statusEl.className   = `status ${status}`;
+        statusEl.textContent = status;
+
+        const sinceEl = row.querySelector('.since');
+        sinceEl.dataset.since = time;
+        sinceEl.textContent   = relTime(time);
+
+        applyRoomFilter();
+      }
+
+      // ── History prepend ──────────────────────────────────────────────────────
+
+      function prependEntry(room, status, time) {
+        const empty = feed.querySelector('.history-empty');
+        if (empty) empty.remove();
+
+        const el = document.createElement('div');
+        el.className = 'history-entry';
+        el.dataset.room   = room;
+        el.dataset.status = status;
+        el.dataset.ts     = time;
+        el.innerHTML = `
+          <span class="entry-room">${room}</span>
+          <span class="entry-status ${status}">${status}</span>
+          <span class="entry-time">${fmt(time)}</span>`;
+        feed.insertBefore(el, feed.firstChild);
+        applyHistFilter();
+      }
+
+      // ── Polling ──────────────────────────────────────────────────────────────
+
+      let lastTimestamp = 0;
+      document.querySelectorAll('[data-time]').forEach(el => {
+        const t = Number(el.dataset.time);
+        if (t > lastTimestamp) lastTimestamp = t;
+      });
+
+      const updatedEl = document.getElementById('last-updated');
+      let secondsSinceUpdate = 0;
+
+      function updateHeader() {
+        updatedEl.textContent = secondsSinceUpdate === 0
+          ? 'just updated'
+          : `updated ${secondsSinceUpdate}s ago`;
+      }
+
+      async function poll() {
+        try {
+          const res = await fetch(`/api/status?timestamp=${lastTimestamp}`);
+          if (!res.ok) throw new Error(res.status);
+          const data = await res.json();
+
+          if (data.changes && data.changes.length > 0) {
+            const sorted = [...data.changes].sort((a, b) => a.time - b.time);
+            sorted.forEach(c => {
+              upsertRow(c.room, c.status, c.time);
+              prependEntry(c.room, c.status, c.time);
+            });
+            lastTimestamp = data.timestamp;
+          }
+
+          secondsSinceUpdate = 0;
+          updateHeader();
+        } catch (_) {}
+      }
+
+      setInterval(poll, 5000);
+
+      setInterval(() => {
+        secondsSinceUpdate++;
+        updateHeader();
+        document.querySelectorAll('[data-since]').forEach(el => {
+          el.textContent = relTime(Number(el.dataset.since));
+        });
+      }, 1000);
     </script>
   </body>
 </html>
