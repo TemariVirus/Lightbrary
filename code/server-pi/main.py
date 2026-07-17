@@ -126,19 +126,24 @@ def changes_since(timestamp: int) -> list[dict[str, Any]]:
     changes: list[dict[str, Any]] = []
     if not DATA_DIR.exists():
         return changes
+    seen: set[tuple[str, int]] = set()
     with lock:
         for path in sorted(DATA_DIR.glob("status-*.csv")):
             with path.open(newline="", encoding="utf-8") as file:
                 for row in csv.DictReader(file):
                     try:
-                        if int(row["time"]) > timestamp:
-                            changes.append(
-                                {
-                                    "room": row["room"],
-                                    "time": int(row["time"]),
-                                    "status": row["status"],
-                                }
-                            )
+                        t = int(row["time"])
+                        if t > timestamp:
+                            key = (row["room"], t)
+                            if key not in seen:
+                                seen.add(key)
+                                changes.append(
+                                    {
+                                        "room": row["room"],
+                                        "time": t,
+                                        "status": row["status"],
+                                    }
+                                )
                     except (KeyError, TypeError, ValueError):
                         continue
     return sorted(changes, key=lambda change: change["time"])
@@ -214,8 +219,11 @@ def start_mqtt() -> mqtt.Client:
     return client
 
 
+# Run at import time so history is restored whether Flask is started via
+# `python main.py`, gunicorn, or the debug reloader's child process.
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+load_history()
+start_mqtt()
+
 if __name__ == "__main__":
-    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    load_history()
-    start_mqtt()
     app.run(host="0.0.0.0", port=HTTP_PORT)
