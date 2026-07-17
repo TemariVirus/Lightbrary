@@ -66,6 +66,39 @@
 
       section { margin-bottom: 2.5rem; }
 
+      /* Overview cards */
+      .overview-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-bottom: 2.5rem;
+      }
+
+      .room-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: .65rem 1rem;
+        min-width: 120px;
+      }
+
+      .room-card-name {
+        font-size: .72rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--muted);
+        margin-bottom: .25rem;
+      }
+
+      .room-card-status {
+        font-size: .9rem;
+        font-weight: 600;
+      }
+
+      .room-card-status.Available { color: var(--available); }
+      .room-card-status.Occupied  { color: var(--occupied); }
+      .room-card-status.Offline   { color: var(--offline); }
+
       /* Filter bar */
       .filters {
         display: flex;
@@ -264,6 +297,16 @@
         <h1>Lightbrary / Room Status</h1>
         <span id="last-updated">Live</span>
       </header>
+
+      <!-- Overview -->
+      <div class="overview-grid" id="overview-grid">
+        {% for room in rooms %}
+        <div class="room-card" id="ov-{{ room.room }}">
+          <div class="room-card-name">{{ room.room }}</div>
+          <div class="room-card-status {{ room.status }}">{{ room.status }}</div>
+        </div>
+        {% endfor %}
+      </div>
 
       <!-- Current Status -->
       <section id="rooms-section">
@@ -522,6 +565,24 @@
         });
       });
 
+      // ── Overview card upsert ─────────────────────────────────────────────────
+
+      const overviewGrid = document.getElementById('overview-grid');
+
+      function upsertCard(room, status) {
+        let card = document.getElementById('ov-' + room);
+        if (!card) {
+          card = document.createElement('div');
+          card.className = 'room-card';
+          card.id = 'ov-' + room;
+          card.innerHTML = `<div class="room-card-name">${room}</div><div class="room-card-status"></div>`;
+          overviewGrid.appendChild(card);
+        }
+        const s = card.querySelector('.room-card-status');
+        s.className   = `room-card-status ${status}`;
+        s.textContent = status;
+      }
+
       // ── Row upsert ───────────────────────────────────────────────────────────
 
       const table = document.getElementById('rooms-table');
@@ -556,8 +617,10 @@
         sinceEl.dataset.since = time;
         sinceEl.textContent   = relTime(time);
 
+        upsertCard(room, status);
         applyRoomFilter();
       }
+
 
       // ── History prepend ──────────────────────────────────────────────────────
 
