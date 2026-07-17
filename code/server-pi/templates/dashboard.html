@@ -239,6 +239,22 @@
         color: var(--muted);
         font-size: .85rem;
       }
+
+      /* Specific date picker */
+      .date-filter {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: .75rem;
+        padding: .25rem .5rem;
+        border-radius: 3px;
+        cursor: pointer;
+        line-height: 1.4;
+        outline: none;
+        color-scheme: dark;
+      }
+      .date-filter::-webkit-calendar-picker-indicator { filter: invert(.4); cursor: pointer; }
+      .date-filter:focus, .date-filter:not(:placeholder-shown) { border-color: #555; color: var(--text); }
     </style>
   </head>
   <body>
@@ -268,6 +284,7 @@
             <button class="preset-btn" data-sec="21600">6h</button>
             <button class="preset-btn" data-sec="86400">Today</button>
           </div>
+          <input id="filter-date" type="date" class="date-filter" title="Filter by specific date">
         </div>
 
         <table id="rooms-table">
@@ -311,6 +328,7 @@
             <button class="preset-btn" data-sec="21600">6h</button>
             <button class="preset-btn" data-sec="86400">Today</button>
           </div>
+          <input id="hist-filter-date" type="date" class="date-filter" title="Filter by specific date">
         </div>
 
         <div class="history-wrap">
@@ -365,18 +383,26 @@
 
       const filterRoom   = document.getElementById('filter-room');
       const filterStatus = document.getElementById('filter-status');
+      const filterDate   = document.getElementById('filter-date');
       const tbody        = document.getElementById('rooms-tbody');
-      let roomWindowSec  = 0; // 0 = no time filter
+      let roomWindowSec  = 0; // 0 = no rolling window
+      let roomDateRange  = null; // { from, to } unix sec for a specific day
 
       function applyRoomFilter() {
         const roomQ   = filterRoom.value.trim().toLowerCase();
         const statusQ = filterStatus.value;
-        const cutoff  = roomWindowSec ? Math.floor(Date.now() / 1000) - roomWindowSec : 0;
+        let cutoffFrom = 0, cutoffTo = Infinity;
+        if (roomDateRange) {
+          cutoffFrom = roomDateRange.from;
+          cutoffTo   = roomDateRange.to;
+        } else if (roomWindowSec) {
+          cutoffFrom = Math.floor(Date.now() / 1000) - roomWindowSec;
+        }
         tbody.querySelectorAll('tr[data-room]').forEach(row => {
           const t = Number(row.dataset.time);
           const matchRoom   = !roomQ   || row.dataset.room.toLowerCase().includes(roomQ);
           const matchStatus = !statusQ || row.dataset.status === statusQ;
-          const matchTime   = !cutoff  || t >= cutoff;
+          const matchTime   = t >= cutoffFrom && t <= cutoffTo;
           row.classList.toggle('hidden', !(matchRoom && matchStatus && matchTime));
         });
       }
@@ -384,11 +410,28 @@
       filterRoom.addEventListener('input', applyRoomFilter);
       filterStatus.addEventListener('change', applyRoomFilter);
 
+      filterDate.addEventListener('change', () => {
+        if (filterDate.value) {
+          // midnight → midnight for the selected local date
+          const d = new Date(filterDate.value);
+          roomDateRange  = { from: d.getTime() / 1000, to: d.getTime() / 1000 + 86399 };
+          roomWindowSec  = 0;
+          document.querySelectorAll('#room-time-presets .preset-btn').forEach(b => b.classList.remove('active'));
+        } else {
+          roomDateRange = null;
+          // restore All
+          document.querySelector('#room-time-presets .preset-btn[data-sec="0"]').classList.add('active');
+        }
+        applyRoomFilter();
+      });
+
       document.querySelectorAll('#room-time-presets .preset-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('#room-time-presets .preset-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           roomWindowSec = Number(btn.dataset.sec);
+          roomDateRange = null;
+          filterDate.value = '';
           applyRoomFilter();
         });
       });
@@ -397,18 +440,26 @@
 
       const histFilterRoom   = document.getElementById('hist-filter-room');
       const histFilterStatus = document.getElementById('hist-filter-status');
+      const histFilterDate   = document.getElementById('hist-filter-date');
       const feed             = document.getElementById('history-feed');
       let histWindowSec      = 0;
+      let histDateRange      = null;
 
       function applyHistFilter() {
         const roomQ   = histFilterRoom.value.trim().toLowerCase();
         const statusQ = histFilterStatus.value;
-        const cutoff  = histWindowSec ? Math.floor(Date.now() / 1000) - histWindowSec : 0;
+        let cutoffFrom = 0, cutoffTo = Infinity;
+        if (histDateRange) {
+          cutoffFrom = histDateRange.from;
+          cutoffTo   = histDateRange.to;
+        } else if (histWindowSec) {
+          cutoffFrom = Math.floor(Date.now() / 1000) - histWindowSec;
+        }
         feed.querySelectorAll('.history-entry[data-room]').forEach(el => {
           const t = Number(el.dataset.ts);
           const matchRoom   = !roomQ   || el.dataset.room.toLowerCase().includes(roomQ);
           const matchStatus = !statusQ || el.dataset.status === statusQ;
-          const matchTime   = !cutoff  || t >= cutoff;
+          const matchTime   = t >= cutoffFrom && t <= cutoffTo;
           el.classList.toggle('hidden', !(matchRoom && matchStatus && matchTime));
         });
       }
@@ -416,11 +467,26 @@
       histFilterRoom.addEventListener('input', applyHistFilter);
       histFilterStatus.addEventListener('change', applyHistFilter);
 
+      histFilterDate.addEventListener('change', () => {
+        if (histFilterDate.value) {
+          const d = new Date(histFilterDate.value);
+          histDateRange  = { from: d.getTime() / 1000, to: d.getTime() / 1000 + 86399 };
+          histWindowSec  = 0;
+          document.querySelectorAll('#hist-time-presets .preset-btn').forEach(b => b.classList.remove('active'));
+        } else {
+          histDateRange = null;
+          document.querySelector('#hist-time-presets .preset-btn[data-sec="0"]').classList.add('active');
+        }
+        applyHistFilter();
+      });
+
       document.querySelectorAll('#hist-time-presets .preset-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('#hist-time-presets .preset-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           histWindowSec = Number(btn.dataset.sec);
+          histDateRange = null;
+          histFilterDate.value = '';
           applyHistFilter();
         });
       });
