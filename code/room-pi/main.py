@@ -7,12 +7,12 @@ from time import sleep
 import paho.mqtt.client as mqtt
 from gpiozero import Button, MotionSensor
 
-MQTT_HOST = "192.168.1.4"  # TODO: change to domain name
+MQTT_HOST = "192.168.1.253"
 MQTT_PORT = 1883
 ROOM_ID = 1
 MQTT_TOPIC = f"rooms/{ROOM_ID}/status"
 
-MQTT_INTERVAL = 30  # seconds
+MQTT_INTERVAL = 2  # seconds
 MQTT_RETRY_INTERVAL = 5  # seconds
 
 PIR_PIN = 20
