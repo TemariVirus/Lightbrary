@@ -67,7 +67,9 @@ if __name__ == "__main__":
         timestamp = datetime.now().timestamp()
 
         result = mqtt_client.publish(
-            MQTT_TOPIC, json.dumps({"status": status, "timestamp": int(timestamp)})
+            MQTT_TOPIC,
+            json.dumps({"status": status, "timestamp": int(timestamp)}),
+            qos=1,
         )
         if result.rc == mqtt.MQTT_ERR_SUCCESS:
             log(f"Published status '{status}'")
