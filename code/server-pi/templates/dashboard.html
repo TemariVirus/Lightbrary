@@ -439,8 +439,7 @@
             data.rooms.forEach(r => upsertCard(r.room, r.status));
           }
 
-          // Always advance the cursor so we never re-fetch the same window
-          if (data.timestamp) lastTimestamp = data.timestamp;
+          lastTimestamp = data.changes.reduce((acc, change) => Math.max(change.time , acc), lastTimestamp)
 
           secondsSinceUpdate = 0;
           updatedEl.style.color = '';

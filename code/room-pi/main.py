@@ -33,7 +33,10 @@ def mqtt_on_connect(client, userdata, flags, reason_code, properties) -> None:
 
 
 def mqtt_connect(host: str, port: int) -> mqtt.Client:
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+    client = mqtt.Client(
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id=f"lightbrary-room-{ROOM_ID}",
+    )
     client.on_connect = mqtt_on_connect
     client.connect(host, port, 60)
     client.loop_start()

@@ -7,7 +7,6 @@ import os
 import re
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +18,7 @@ DATA_DIR = Path(os.environ.get("LIGHTBRARY_DATA_DIR", BASE_DIR / "data"))
 MQTT_HOST = os.environ.get("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
 OFFLINE_AFTER_SECONDS = 10
+OFFLINE_CHECK_INTERVAL = 1  # Seconds
 TOPIC_PATTERN = re.compile(r"^rooms/([^/]+)/status$")
 VALID_STATUSES = {"Available", "Occupied"}
 HTTP_PORT = int(os.environ.get("PORT", "80"))
@@ -27,13 +27,12 @@ app = Flask(__name__)
 lock = threading.RLock()
 # room -> {status, last_seen, changed_at}
 rooms: dict[str, dict[str, Any]] = {}
+# sorted in ascending order by time {room, time, status}
+rows: list[dict[str, Any]] = []
 
 
-def log_path(timestamp: int) -> Path:
-    """Return the daily, append-only log path for a Unix timestamp."""
-    return (
-        DATA_DIR / f"status-{datetime.fromtimestamp(timestamp).date().isoformat()}.csv"
-    )
+def log_path() -> Path:
+    return DATA_DIR / "status.csv"
 
 
 def ensure_log_file(path: Path) -> None:
@@ -48,43 +47,72 @@ def ensure_log_file(path: Path) -> None:
         pass
 
 
+def get_row_index(timestamp: int) -> int:
+    """Returns the index of the first row that has a timestamp larger than the
+    provided timestamp, or `len(rows)` if no such row exists."""
+    left = 0
+    right = len(rows)
+    while left < right:
+        mid = (left + right) // 2
+        if rows[mid]["time"] < timestamp:
+            left = mid + 1
+        else:
+            right = mid
+    while left < len(rows) and rows[left]["time"] == timestamp:
+        left += 1
+    return left
+
+
 def append_change(room: str, timestamp: int, status: str) -> None:
     """Append, never rewrite, one status change to that day's CSV file."""
-    path = log_path(timestamp)
+    path = log_path()
     ensure_log_file(path)
     with lock:
+        index = get_row_index(timestamp)
+        # Reject duplicates
+        i = min(index, len(rows) - 1)
+        while i >= 0 and rows[i]["time"] == timestamp:
+            if rows[i]["room"] == room:
+                return
+            i -= 1
+
+        rows.insert(index, {"room": room, "time": timestamp, "status": status})
         with path.open("a", newline="", encoding="utf-8") as file:
             csv.writer(file).writerow([room, timestamp, status])
 
 
 def load_history() -> None:
     """Restore the most recent known status per room without editing old logs."""
-    if not DATA_DIR.exists():
+    path = log_path()
+    if not path.exists():
         return
     with lock:
-        for path in sorted(DATA_DIR.glob("status-*.csv")):
-            with path.open(newline="", encoding="utf-8") as file:
-                for row in csv.DictReader(file):
-                    try:
-                        timestamp = int(row["time"])
-                    except (KeyError, TypeError, ValueError):
-                        logging.warning("Skipping malformed row in %s: %s", path, row)
-                        continue
-                    room = row.get("room", "")
-                    status = row.get("status", "")
-                    if room and timestamp >= rooms.get(room, {}).get("changed_at", -1):
-                        rooms[room] = {
-                            "status": status,
-                            "last_seen": timestamp,
-                            "changed_at": timestamp,
-                        }
+        with path.open(newline="", encoding="utf-8") as file:
+            for row in csv.DictReader(file):
+                try:
+                    timestamp = int(row["time"])
+                except (KeyError, TypeError, ValueError):
+                    logging.warning("Skipping malformed row in %s: %s", path, row)
+                    continue
+                room = row.get("room", "")
+                status = row.get("status", "")
+                rows.append({"room": room, "time": timestamp, "status": status})
+                if room and timestamp >= rooms.get(room, {}).get("changed_at", -1):
+                    rooms[room] = {
+                        "status": status,
+                        "last_seen": timestamp,
+                        "changed_at": timestamp,
+                    }
+        rows.sort(key=lambda r: r["time"])
 
 
 def record_status(room: str, status: str, timestamp: int) -> None:
     """Accept a device update and persist it only when the visible status changed."""
     with lock:
         previous = rooms.get(room)
-        if previous is None or previous["status"] != status:
+        if previous is None or (
+            previous["status"] != status and previous["last_seen"] <= timestamp
+        ):
             append_change(room, timestamp, status)
             changed_at = timestamp
         else:
@@ -96,16 +124,18 @@ def record_status(room: str, status: str, timestamp: int) -> None:
         }
 
 
-def refresh_offline_rooms(now: int | None = None) -> None:
-    """Record one Offline transition after a device has been silent for 60 seconds."""
-    now = now or int(time.time())
+def refresh_offline_rooms() -> None:
+    """Record an Offline transition after a device has been silent for too long."""
+    now = int(time.time())
     with lock:
         for room, state in list(rooms.items()):
             if (
                 state["status"] != "Offline"
                 and now - state["last_seen"] > OFFLINE_AFTER_SECONDS
             ):
-                append_change(room, now, "Offline")
+                append_change(
+                    room, state["last_seen"] + OFFLINE_AFTER_SECONDS, "Offline"
+                )
                 rooms[room] = {
                     "status": "Offline",
                     "last_seen": state["last_seen"],
@@ -113,8 +143,13 @@ def refresh_offline_rooms(now: int | None = None) -> None:
                 }
 
 
+def check_offline_thread() -> None:
+    while True:
+        refresh_offline_rooms()
+        time.sleep(1)
+
+
 def room_snapshot() -> list[dict[str, Any]]:
-    refresh_offline_rooms()
     with lock:
         return [
             {"room": room, "status": state["status"], "time": state["changed_at"]}
@@ -124,35 +159,20 @@ def room_snapshot() -> list[dict[str, Any]]:
 
 def changes_since(timestamp: int) -> list[dict[str, Any]]:
     changes: list[dict[str, Any]] = []
-    if not DATA_DIR.exists():
-        return changes
-    seen: set[tuple[str, int]] = set()
     with lock:
-        for path in sorted(DATA_DIR.glob("status-*.csv")):
-            with path.open(newline="", encoding="utf-8") as file:
-                for row in csv.DictReader(file):
-                    try:
-                        t = int(row["time"])
-                        if t > timestamp:
-                            key = (row["room"], t)
-                            if key not in seen:
-                                seen.add(key)
-                                changes.append(
-                                    {
-                                        "room": row["room"],
-                                        "time": t,
-                                        "status": row["status"],
-                                    }
-                                )
-                    except (KeyError, TypeError, ValueError):
-                        continue
-    return sorted(changes, key=lambda change: change["time"])
+        start = get_row_index(timestamp)
+        assert start is not None
+        while start > 0 and rows[start - 1]["time"] == timestamp:
+            start -= 1
+        for row in rows[start:]:
+            changes.append(row.copy())
+    return changes
 
 
 @app.get("/")
 def dashboard():
     return render_template(
-        "dashboard.html", rooms=room_snapshot(), changes=changes_since(0)
+        "dashboard.html", rooms=room_snapshot(), changes=changes_since(-1)
     )
 
 
@@ -164,10 +184,8 @@ def api_status():
         timestamp = int(raw_timestamp)
     except ValueError:
         return jsonify({"error": "timestamp must be a Unix timestamp in seconds"}), 400
-    refresh_offline_rooms()
     return jsonify(
         {
-            "timestamp": int(time.time()),
             "changes": changes_since(timestamp),
             "rooms": room_snapshot(),
         }
@@ -226,4 +244,6 @@ load_history()
 start_mqtt()
 
 if __name__ == "__main__":
+    thread = threading.Thread(target=check_offline_thread)
+    thread.start()
     app.run(host="0.0.0.0", port=HTTP_PORT)
