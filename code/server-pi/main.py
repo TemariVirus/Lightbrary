@@ -221,7 +221,7 @@ def on_message(client: mqtt.Client, userdata: Any, message: mqtt.MQTTMessage) ->
             or not isinstance(timestamp, (int, float))
         ):
             raise ValueError("invalid status")
-        record_status(match.group(1), status, int(timestamp))
+        record_status(match.group(1), status, int(time.time()))
     except (UnicodeDecodeError, json.JSONDecodeError, KeyError, ValueError) as error:
         logging.warning("Ignoring invalid MQTT message on %s: %s", message.topic, error)
 
