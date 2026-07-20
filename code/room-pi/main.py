@@ -15,7 +15,7 @@ MQTT_TOPIC = f"rooms/{ROOM_ID}/status"
 MQTT_INTERVAL = 2  # seconds
 MQTT_RETRY_INTERVAL = 5  # seconds
 
-PIR_PIN = 14
+PIR_PIN = 20
 TOUCH_PIN = 21
 
 
