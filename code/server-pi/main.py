@@ -152,7 +152,7 @@ def check_offline_thread() -> None:
 def room_snapshot() -> list[dict[str, Any]]:
     with lock:
         return [
-            {"room": room, "status": state["status"], "time": state["changed_at"]}
+            {"room": room, "status": state["status"]}
             for room, state in sorted(rooms.items())
         ]
 
@@ -188,6 +188,7 @@ def api_status():
         {
             "changes": changes_since(timestamp),
             "rooms": room_snapshot(),
+            "timestamp": int(time.time()),
         }
     )
 

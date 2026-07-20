@@ -429,9 +429,10 @@
           const data = await res.json();
 
           // Prepend any new history entries
+          const dTime = Math.floor(Date.now() / 1000) - data.timestamp;
           if (data.changes && data.changes.length > 0) {
             const sorted = [...data.changes].sort((a, b) => a.time - b.time);
-            sorted.forEach(c => prependEntry(c.room, c.status, c.time));
+            sorted.forEach(c => prependEntry(c.room, c.status, c.time + dTime));
           }
 
           // Reconcile room cards from the authoritative rooms list (1 card per room)
