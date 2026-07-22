@@ -37,27 +37,3 @@ The payload is a JSON string of the format:
 ```
 
 If the Server Pi does not receive a room status from a Room Pi for more than 60 seconds, that room is considered `Offline`.
-
-## DHCP config
-
-### User subnet
-
-```
-Default gateway: 192.168.10.1
-DNS: 192.168.30.2
-Start address: 192.168.10.2
-Subnet mask: 255.255.255.0
-```
-
-### IoT subnet
-
-```
-Default gateway: 192.168.20.1
-DNS: 192.168.30.2
-Start address: 192.168.20.2
-Subnet mask: 255.255.255.0
-```
-
-### Server subnet
-
-None. The server's IP address is statically assigned.
