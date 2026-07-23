@@ -193,6 +193,70 @@ def api_status():
     )
 
 
+@app.get("/api/analytics")
+def api_analytics():
+    """Return per-room occupancy % and summary counts over a time window."""
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except ValueError:
+        hours = 24
+    hours = max(1, min(hours, 168))  # clamp 1h–7d
+
+    now = int(time.time())
+    window_start = now - hours * 3600
+
+    with lock:
+        # Collect status change events per room within the window
+        room_events: dict[str, list[tuple[int, str]]] = {}
+        for room_name in rooms:
+            room_events[room_name] = []
+
+        for row in rows:
+            if row["time"] >= window_start:
+                room_name = row["room"]
+                if room_name not in room_events:
+                    room_events[room_name] = []
+                room_events[room_name].append((row["time"], row["status"]))
+
+        # Also need the last event before the window for each room to know
+        # what status it started with
+        room_initial: dict[str, str] = {}
+        for row in rows:
+            if row["time"] < window_start:
+                room_initial[row["room"]] = row["status"]
+            else:
+                break
+
+        # Compute occupancy % per room
+        usage: dict[str, float] = {}
+        for room_name, events in room_events.items():
+            # Build a timeline: [(timestamp, status), ...]
+            timeline: list[tuple[int, str]] = []
+
+            # Start of window: use initial status or "Available"
+            start_status = room_initial.get(room_name, "Available")
+            timeline.append((window_start, start_status))
+
+            for t, s in sorted(events):
+                timeline.append((t, s))
+
+            # End of window
+            timeline.append((now, ""))
+
+            # Sum time spent as "Occupied"
+            occupied_seconds = 0
+            for i in range(len(timeline) - 1):
+                if timeline[i][1] == "Occupied":
+                    occupied_seconds += timeline[i + 1][0] - timeline[i][0]
+
+            total_seconds = now - window_start
+            usage[room_name] = round(
+                occupied_seconds / total_seconds * 100, 1
+            ) if total_seconds > 0 else 0.0
+
+    return jsonify({"usage": usage, "hours": hours})
+
+
 def on_connect(
     client: mqtt.Client,
     userdata: Any,
