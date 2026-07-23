@@ -171,9 +171,7 @@ def changes_since(timestamp: int) -> list[dict[str, Any]]:
 
 @app.get("/")
 def dashboard():
-    return render_template(
-        "dashboard.html", rooms=room_snapshot(), changes=changes_since(-1)
-    )
+    return render_template("dashboard.html", rooms=[], changes=[])
 
 
 @app.get("/api/status")
@@ -250,9 +248,11 @@ def api_analytics():
                     occupied_seconds += timeline[i + 1][0] - timeline[i][0]
 
             total_seconds = now - window_start
-            usage[room_name] = round(
-                occupied_seconds / total_seconds * 100, 1
-            ) if total_seconds > 0 else 0.0
+            usage[room_name] = (
+                round(occupied_seconds / total_seconds * 100, 1)
+                if total_seconds > 0
+                else 0.0
+            )
 
     return jsonify({"usage": usage, "hours": hours})
 
