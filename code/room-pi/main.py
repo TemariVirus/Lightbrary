@@ -12,7 +12,7 @@ MQTT_PORT = 1883
 ROOM_ID = 1
 MQTT_TOPIC = f"rooms/{ROOM_ID}/status"
 
-MQTT_INTERVAL = 2  # seconds
+MQTT_INTERVAL = 30  # seconds
 MQTT_RETRY_INTERVAL = 5  # seconds
 
 PIR_PIN = 20
