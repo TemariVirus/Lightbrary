@@ -1,9 +1,5 @@
 # Lightbrary
 
-## Data flow diagram
-
-![data flow diagram](images/dataflow.png)
-
 ## Device roles
 
 Room Pis:
